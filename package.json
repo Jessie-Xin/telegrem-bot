@@ -1,0 +1,29 @@
+{
+    "scripts": {
+        "dev": "nodemon",
+        "build": "tsc",
+        "start": "node dist/bot.js"
+    },
+    "dependencies": {
+        "@google/genai": "^0.10.0",
+        "axios": "^1.9.0",
+        "dotenv": "^16.5.0",
+        "node-cron": "^3.0.3",
+        "node-telegram-bot-api": "^0.66.0"
+    },
+    "devDependencies": {
+        "@types/dotenv": "^8.2.3",
+        "@types/node": "^22.15.1",
+        "@types/node-telegram-bot-api": "^0.64.8",
+        "nodemon": "^3.1.10",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.8.3"
+    },
+    "name": "telegrem-bot",
+    "version": "1.0.0",
+    "main": "index.js",
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": ""
+}
