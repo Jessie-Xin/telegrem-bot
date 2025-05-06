@@ -14,83 +14,83 @@ class UserManager {
     private userRoles = new Map<number, string>();
     private readonly MESSAGE_COOLDOWN = 10000; // 10秒消息冷却
     private readonly SWITCH_COOLDOWN = 100000; // 100秒切换冷却
-    
+
     // 获取用户模型
     getModel(userId: number): AIModel {
         return this.userModels.get(userId) || "hunyuan";
     }
-    
+
     // 获取用户角色
     getRole(userId: number): string | undefined {
         return this.userRoles.get(userId);
     }
-    
+
     // 设置用户模型
     setModel(userId: number, model: AIModel): void {
         this.userModels.set(userId, model);
         this.updateSwitchTime(userId);
     }
-    
+
     // 设置用户角色
     setRole(userId: number, role: string): void {
         this.userRoles.set(userId, role);
         this.updateSwitchTime(userId);
     }
-    
+
     // 更新消息时间
     updateMessageTime(userId: number): void {
         this.lastMessageTimes.set(userId, Date.now());
     }
-    
+
     // 更新切换时间
     updateSwitchTime(userId: number): void {
         this.lastSwitchTimes.set(userId, Date.now());
     }
-    
+
     // 检查消息冷却
     canSendMessage(userId: number): boolean {
         const lastTime = this.lastMessageTimes.get(userId);
-        return !lastTime || (Date.now() - lastTime >= this.MESSAGE_COOLDOWN);
+        return !lastTime || Date.now() - lastTime >= this.MESSAGE_COOLDOWN;
     }
-    
+
     // 检查切换冷却
     canSwitch(userId: number): boolean {
         const lastTime = this.lastSwitchTimes.get(userId);
-        return !lastTime || (Date.now() - lastTime >= this.SWITCH_COOLDOWN);
+        return !lastTime || Date.now() - lastTime >= this.SWITCH_COOLDOWN;
     }
-    
+
     // 清理长时间不活跃的用户数据
     cleanInactiveUsers(maxInactiveTime: number = 24 * 60 * 60 * 1000): void {
         const now = Date.now();
-        
+
         // 清理消息时间记录
         this.lastMessageTimes.forEach((time, userId) => {
             if (now - time > maxInactiveTime) {
                 this.lastMessageTimes.delete(userId);
             }
         });
-        
+
         // 清理切换时间记录
         this.lastSwitchTimes.forEach((time, userId) => {
             if (now - time > maxInactiveTime) {
                 this.lastSwitchTimes.delete(userId);
             }
         });
-        
+
         // 清理用户模型记录
         this.userModels.forEach((_, userId) => {
             if (!this.lastMessageTimes.has(userId) && !this.lastSwitchTimes.has(userId)) {
                 this.userModels.delete(userId);
             }
         });
-        
+
         // 清理用户角色记录
         this.userRoles.forEach((_, userId) => {
             if (!this.lastMessageTimes.has(userId) && !this.lastSwitchTimes.has(userId)) {
                 this.userRoles.delete(userId);
             }
         });
-        
+
         console.log(`已清理不活跃用户数据，当前活跃用户数: ${this.lastMessageTimes.size}`);
     }
 }
@@ -101,26 +101,26 @@ class ErrorHandler {
     static logError(context: string, error: any): void {
         const timestamp = new Date().toISOString();
         const errorMessage = error?.message || String(error);
-        const stack = error?.stack || 'No stack trace';
+        const stack = error?.stack || "No stack trace";
         console.error(`[${timestamp}] [ERROR] [${context}] ${errorMessage}\n${stack}`);
     }
-    
+
     // 处理Telegram API错误
     static async handleTelegramError(context: string, error: any, retryFn?: () => Promise<any>): Promise<any> {
         this.logError(context, error);
-        
+
         // 处理速率限制错误
         if (error?.code === "ETELEGRAM" && error?.response?.statusCode === 429) {
             const retryAfter = error.response.headers["retry-after"] || 5;
             console.log(`Rate limited. Waiting ${retryAfter} seconds before retry...`);
             await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-            
+
             // 如果提供了重试函数，则执行
             if (retryFn) {
                 return retryFn();
             }
         }
-        
+
         throw error;
     }
 }
@@ -134,7 +134,8 @@ const modelKeyboard = {
         inline_keyboard: [
             [
                 {text: "Gemini", callback_data: "model_gemini"},
-                {text: "Hunyuan", callback_data: "model_hunyuan"}
+                {text: "Hunyuan", callback_data: "model_hunyuan"},
+                {text: "Cloudflare", callback_data: "model_cloudflare"}
             ]
         ]
     }
@@ -167,7 +168,7 @@ const sendMessageWithRetry = async (chatId: number, text: string, options: any =
             const retryAfter = error.response.headers["retry-after"] || 5;
             console.log(`Rate limited. Waiting ${retryAfter} seconds before retry...`);
             await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-            
+
             // 递归重试一次
             return sendMessageWithRetry(chatId, text, options);
         }
@@ -178,7 +179,7 @@ const sendMessageWithRetry = async (chatId: number, text: string, options: any =
 // 处理切换模型命令
 const handleSwitchModelCommand = async (msg: TelegramBot.Message): Promise<void> => {
     if (!msg.chat?.id) return;
-    
+
     try {
         await sendMessageWithRetry(msg.chat.id, "请选择AI模型：", modelKeyboard);
     } catch (error) {
@@ -189,7 +190,7 @@ const handleSwitchModelCommand = async (msg: TelegramBot.Message): Promise<void>
 // 处理切换角色命令
 const handleSwitchRoleCommand = async (msg: TelegramBot.Message): Promise<void> => {
     if (!msg.chat?.id) return;
-    
+
     try {
         await sendMessageWithRetry(msg.chat.id, "请选择AI角色：", roleKeyboard);
     } catch (error) {
@@ -225,9 +226,9 @@ const handleCallbackQueryError = async (callbackQuery: TelegramBot.CallbackQuery
 bot.on("callback_query", async (callbackQuery) => {
     const msg = callbackQuery.message;
     const userId = callbackQuery.from.id;
-    const useName=callbackQuery.from.first_name;
-    const useLastName=callbackQuery.from.last_name;
-    const useFullName=useName+(useLastName?` ${useLastName}`:"");
+    const useName = callbackQuery.from.first_name;
+    const useLastName = callbackQuery.from.last_name;
+    const useFullName = useName + (useLastName ? ` ${useLastName}` : "");
 
     if (!msg) return;
 
@@ -290,10 +291,10 @@ bot.on("message", async (msg) => {
                 try {
                     const model = userManager.getModel(userId);
                     const role = userManager.getRole(userId);
-                    const response = await askAI(userMessage, { model, role });
+                    const response = await askAI(userMessage, {model, role});
                     if (response) {
                         await sendMessageWithRetry(msg.chat.id, response, {
-                            reply_to_message_id: msg.message_id,
+                            reply_to_message_id: msg.message_id
                         });
                         userManager.updateMessageTime(userId);
                     }

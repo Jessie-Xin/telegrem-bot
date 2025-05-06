@@ -9,7 +9,12 @@ const hunyuanAI = new OpenAI({
     baseURL: "https://api.hunyuan.cloud.tencent.com/v1"
 });
 
-export type AIModel = "gemini" | "hunyuan";
+const cloudflareAI = new OpenAI({
+    apiKey: process.env["CLOUDFLARE_API_KEY"],
+    baseURL: `https://api.cloudflare.com/client/v4/accounts/c6435fdc5fb41b478467140cf7da739b/ai/v1`
+});
+
+export type AIModel = "gemini" | "hunyuan" | "cloudflare";
 export type Role = {
     name: string;
     description: string;
@@ -76,6 +81,42 @@ export const askHunyuan = async (prompt: string, rolePrompt?: string): Promise<s
     }
 };
 
+const tools: OpenAI.ChatCompletionTool[] = [
+    {
+        type: "function",
+        function: {
+            name: "get_weather",
+            description: "Get the weather in a given location",
+            parameters: {
+                type: "object",
+                properties: {
+                    location: {
+                        type: "string",
+                        description: "The city and state, e.g. Chicago, IL"
+                    },
+                    unit: {type: "string", enum: ["celsius", "fahrenheit"]}
+                },
+                required: ["location"]
+            }
+        }
+    }
+];
+export const askCloudflare = async (prompt: string, rolePrompt?: string): Promise<string> => {
+    const finalPrompt = rolePrompt ? `${rolePrompt}\n\n用户问题：${prompt}` : prompt;
+    try {
+        const chatCompletion = await cloudflareAI.chat.completions.create({
+            messages: [{role: "user", content: finalPrompt}],
+            model: "@cf/google/gemma-2b-it-lora",
+            tools: tools,
+            tool_choice: "auto"
+        });
+        return chatCompletion.choices[0].message.content || "No response";
+    } catch (error) {
+        console.log("error", error);
+        return "Cloudflare API Error";
+    }
+};
+
 export const askAI = async (prompt: string, context: UserContext): Promise<string> => {
     const rolePrompt = context.role ? roles[context.role]?.prompt : undefined;
 
@@ -84,7 +125,8 @@ export const askAI = async (prompt: string, context: UserContext): Promise<strin
             return askGemini(prompt, rolePrompt);
         case "hunyuan":
             return askHunyuan(prompt, rolePrompt);
-
+        case "cloudflare":
+            return askCloudflare(prompt, rolePrompt);
         default:
             return "Invalid model selected";
     }
