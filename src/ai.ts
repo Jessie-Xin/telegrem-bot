@@ -1,16 +1,15 @@
 import {GoogleGenAI} from "@google/genai";
-import OpenAI from 'openai';
+import OpenAI from "openai";
 import dotenv from "dotenv";
 dotenv.config();
 
 const geminiAI = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
 const hunyuanAI = new OpenAI({
-    apiKey: process.env['HUNYUAN_API_KEY'],
-    baseURL: "https://api.hunyuan.cloud.tencent.com/v1",
+    apiKey: process.env["HUNYUAN_API_KEY"],
+    baseURL: "https://api.hunyuan.cloud.tencent.com/v1"
 });
 
-export type AIModel = 'gemini' | 'hunyuan';
-
+export type AIModel = "gemini" | "hunyuan";
 export type Role = {
     name: string;
     description: string;
@@ -22,11 +21,11 @@ export type UserContext = {
     role?: string;
 };
 
-export const roles: { [key: string]: Role } = {
+export const roles: {[key: string]: Role} = {
     default: {
         name: "默认助手",
         description: "一个友好、专业的AI助手",
-        prompt: "你是一个友好、专业的AI助手。请以专业、友好的方式回答用户的问题。"
+        prompt: "你是一个友好、专业的AI助手。请以专业、友好的方式回答用户的问题。 请记住在使用中文回答。"
     },
     dj: {
         name: "DJ超",
@@ -66,9 +65,9 @@ export const askHunyuan = async (prompt: string, rolePrompt?: string): Promise<s
             messages: [
                 {
                     role: "user",
-                    content: finalPrompt,
-                },
-            ],
+                    content: finalPrompt
+                }
+            ]
         });
         return completion.choices[0].message.content || "No response";
     } catch (error) {
@@ -79,13 +78,14 @@ export const askHunyuan = async (prompt: string, rolePrompt?: string): Promise<s
 
 export const askAI = async (prompt: string, context: UserContext): Promise<string> => {
     const rolePrompt = context.role ? roles[context.role]?.prompt : undefined;
-    
+
     switch (context.model) {
-        case 'gemini':
+        case "gemini":
             return askGemini(prompt, rolePrompt);
-        case 'hunyuan':
+        case "hunyuan":
             return askHunyuan(prompt, rolePrompt);
+
         default:
             return "Invalid model selected";
     }
-}
+};
