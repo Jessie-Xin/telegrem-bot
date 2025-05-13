@@ -123,6 +123,42 @@ class ErrorHandler {
 
         throw error;
     }
+    
+    // 处理发送消息错误并支持重试
+    static async handleSendMessageError(chatId: number, text: string, options: any = {}): Promise<TelegramBot.Message | undefined> {
+        try {
+            const escapedText = options.parse_mode === "MarkdownV2" ? escapeMarkdown(text) : text;
+            return await bot.sendMessage(chatId, escapedText, options);
+        } catch (error: any) {
+            return this.handleTelegramError("发送消息", error, async () => {
+                return this.handleSendMessageError(chatId, text, options);
+            });
+        }
+    }
+    
+    // 处理命令错误
+    static async handleCommandError(error: any, msg: TelegramBot.Message, context: string, errorMessage: string): Promise<void> {
+        this.logError(context, error);
+        try {
+            await this.handleSendMessageError(msg.chat.id!, errorMessage, {
+                reply_to_message_id: msg.message_id
+            });
+        } catch (sendError) {
+            this.logError("发送错误消息", sendError);
+        }
+    }
+    
+    // 处理回调查询错误
+    static async handleCallbackQueryError(callbackQuery: TelegramBot.CallbackQuery, errorMessage: string): Promise<void> {
+        try {
+            await bot.answerCallbackQuery(callbackQuery.id, {
+                text: errorMessage,
+                show_alert: true
+            });
+        } catch (error) {
+            this.logError("发送回调应答", error);
+        }
+    }
 }
 
 // 创建用户管理器实例
@@ -153,27 +189,9 @@ const roleKeyboard = {
     }
 };
 
-// 添加错误处理和重试逻辑的辅助函数
+// Markdown转义辅助函数
 const escapeMarkdown = (text: string): string => {
     return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
-};
-
-const sendMessageWithRetry = async (chatId: number, text: string, options: any = {}): Promise<TelegramBot.Message | undefined> => {
-    try {
-        const escapedText = options.parse_mode === "MarkdownV2" ? escapeMarkdown(text) : text;
-        return await bot.sendMessage(chatId, escapedText, options);
-    } catch (error: any) {
-        // 处理速率限制错误
-        if (error.code === "ETELEGRAM" && error.response?.statusCode === 429) {
-            const retryAfter = error.response.headers["retry-after"] || 5;
-            console.log(`Rate limited. Waiting ${retryAfter} seconds before retry...`);
-            await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-
-            // 递归重试一次
-            return sendMessageWithRetry(chatId, text, options);
-        }
-        throw error;
-    }
 };
 
 // 处理切换模型命令
@@ -181,7 +199,7 @@ const handleSwitchModelCommand = async (msg: TelegramBot.Message): Promise<void>
     if (!msg.chat?.id) return;
 
     try {
-        await sendMessageWithRetry(msg.chat.id, "请选择AI模型：", modelKeyboard);
+        await ErrorHandler.handleSendMessageError(msg.chat.id, "请选择AI模型：", modelKeyboard);
     } catch (error) {
         await handleCommandError(error, msg, "发送模型选择菜单", "发送选择菜单时发生错误，请稍后重试");
     }
@@ -192,34 +210,20 @@ const handleSwitchRoleCommand = async (msg: TelegramBot.Message): Promise<void> 
     if (!msg.chat?.id) return;
 
     try {
-        await sendMessageWithRetry(msg.chat.id, "请选择AI角色：", roleKeyboard);
+        await ErrorHandler.handleSendMessageError(msg.chat.id, "请选择AI角色：", roleKeyboard);
     } catch (error) {
         await handleCommandError(error, msg, "发送角色选择菜单", "发送选择菜单时发生错误，请稍后重试");
     }
 };
 
-// 统一处理命令错误
+// 统一处理命令错误 - 使用ErrorHandler类方法
 const handleCommandError = async (error: any, msg: TelegramBot.Message, context: string, errorMessage: string): Promise<void> => {
-    ErrorHandler.logError(context, error);
-    try {
-        await sendMessageWithRetry(msg.chat.id!, errorMessage, {
-            reply_to_message_id: msg.message_id
-        });
-    } catch (sendError) {
-        ErrorHandler.logError("发送错误消息", sendError);
-    }
+    return ErrorHandler.handleCommandError(error, msg, context, errorMessage);
 };
 
-// 处理回调查询错误的辅助函数
+// 处理回调查询错误的辅助函数 - 使用ErrorHandler类方法
 const handleCallbackQueryError = async (callbackQuery: TelegramBot.CallbackQuery, errorMessage: string): Promise<void> => {
-    try {
-        await bot.answerCallbackQuery(callbackQuery.id, {
-            text: errorMessage,
-            show_alert: true
-        });
-    } catch (error) {
-        ErrorHandler.logError("发送回调应答", error);
-    }
+    return ErrorHandler.handleCallbackQueryError(callbackQuery, errorMessage);
 };
 
 // 处理模型和角色选择回调
@@ -244,13 +248,13 @@ bot.on("callback_query", async (callbackQuery) => {
                 const model = callbackQuery.data.replace("model_", "") as AIModel;
                 userManager.setModel(userId, model);
                 await bot.answerCallbackQuery(callbackQuery.id);
-                await sendMessageWithRetry(msg.chat.id, `${useFullName}已切换到 ${model} 模型`, {});
+                await ErrorHandler.handleSendMessageError(msg.chat.id, `${useFullName}已切换到 ${model} 模型`, {});
             } else {
                 const role = callbackQuery.data.replace("role_", "");
                 userManager.setRole(userId, role);
                 const roleName = roles[role].name;
                 await bot.answerCallbackQuery(callbackQuery.id);
-                await sendMessageWithRetry(msg.chat.id, `${useFullName}已切换到 ${roleName} 角色`, {});
+                await ErrorHandler.handleSendMessageError(msg.chat.id, `${useFullName}已切换到 ${roleName} 角色`, {});
             }
         } catch (error) {
             ErrorHandler.logError("处理模型/角色切换", error);
@@ -263,10 +267,10 @@ bot.on("callback_query", async (callbackQuery) => {
 bot.onText(/\/switchmodel/, handleSwitchModelCommand);
 bot.onText(/\/switchrole/, handleSwitchRoleCommand);
 
-// 处理频率限制消息的辅助函数
+// 处理频率限制消息的辅助函数 - 使用ErrorHandler类方法
 const handleRateLimitMessage = async (msg: TelegramBot.Message, errorMessage: string): Promise<void> => {
     try {
-        await sendMessageWithRetry(msg.chat.id, errorMessage, {
+        await ErrorHandler.handleSendMessageError(msg.chat.id, errorMessage, {
             reply_to_message_id: msg.message_id
         });
     } catch (error) {
@@ -293,7 +297,7 @@ bot.on("message", async (msg) => {
                     const role = userManager.getRole(userId);
                     const response = await askAI(userMessage, {model, role});
                     if (response) {
-                        await sendMessageWithRetry(msg.chat.id, response, {
+                        await ErrorHandler.handleSendMessageError(msg.chat.id, response, {
                             reply_to_message_id: msg.message_id
                         });
                         userManager.updateMessageTime(userId);
