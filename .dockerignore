@@ -1,0 +1,31 @@
+# 版本控制
+.git
+.gitignore
+
+# 开发环境
+node_modules
+.vscode
+.cache
+
+# 日志文件
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 环境变量（在Docker中通过volumes挂载）
+# .env
+
+# 构建输出
+dist
+
+# Docker相关
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 其他
+.DS_Store
+Thumbs.db

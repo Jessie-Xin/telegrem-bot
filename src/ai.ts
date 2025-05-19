@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 dotenv.config();
 
+// 初始化AI服务客户端
 const geminiAI = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
 const hunyuanAI = new OpenAI({
     apiKey: process.env["HUNYUAN_API_KEY"],
@@ -14,6 +15,7 @@ const cloudflareAI = new OpenAI({
     baseURL: `https://api.cloudflare.com/client/v4/accounts/c6435fdc5fb41b478467140cf7da739b/ai/v1`
 });
 
+// 类型定义
 export type AIModel = "gemini" | "hunyuan" | "cloudflare";
 export type Role = {
     name: string;
@@ -26,6 +28,7 @@ export type UserContext = {
     role?: string;
 };
 
+// 预定义角色
 export const roles: {[key: string]: Role} = {
     default: {
         name: "默认助手",
@@ -45,6 +48,16 @@ export const roles: {[key: string]: Role} = {
     }
 };
 
+// 错误处理辅助函数
+const handleAIError = (model: string, error: any): string => {
+    const timestamp = new Date().toISOString();
+    const errorMessage = error?.message || String(error);
+    const stack = error?.stack || "No stack trace";
+    console.error(`[${timestamp}] [ERROR] [${model} API] ${errorMessage}\n${stack}`);
+    return `${model} API Error: ${errorMessage.substring(0, 100)}`;
+};
+
+// Gemini API调用
 export const askGemini = async (prompt: string, rolePrompt?: string): Promise<string> => {
     const finalPrompt = rolePrompt ? `${rolePrompt}\n\n用户问题：${prompt}` : prompt;
     try {
@@ -57,11 +70,11 @@ export const askGemini = async (prompt: string, rolePrompt?: string): Promise<st
         });
         return response.text || "No response";
     } catch (error) {
-        console.log("error", error);
-        return "Gemini API Error";
+        return handleAIError("Gemini", error);
     }
 };
 
+// 腾讯混元API调用
 export const askHunyuan = async (prompt: string, rolePrompt?: string): Promise<string> => {
     const finalPrompt = rolePrompt ? `${rolePrompt}\n\n用户问题：${prompt}` : prompt;
     try {
@@ -76,11 +89,11 @@ export const askHunyuan = async (prompt: string, rolePrompt?: string): Promise<s
         });
         return completion.choices[0].message.content || "No response";
     } catch (error) {
-        console.log("error", error);
-        return "Hunyuan API Error";
+        return handleAIError("Hunyuan", error);
     }
 };
 
+// Cloudflare API工具定义
 const tools: OpenAI.ChatCompletionTool[] = [
     {
         type: "function",
@@ -101,33 +114,46 @@ const tools: OpenAI.ChatCompletionTool[] = [
         }
     }
 ];
+
+// Cloudflare API调用
 export const askCloudflare = async (prompt: string, rolePrompt?: string): Promise<string> => {
     const finalPrompt = rolePrompt ? `${rolePrompt}\n\n用户问题：${prompt}` : prompt;
     try {
-        const chatCompletion = await cloudflareAI.chat.completions.create({
-            messages: [{role: "user", content: finalPrompt}],
-            model: "@cf/google/gemma-2b-it-lora",
-            tools: tools,
-            tool_choice: "auto"
+        const completion = await cloudflareAI.chat.completions.create({
+            model: "@cf/meta/llama-3-8b-instruct",
+            messages: [
+                {
+                    role: "user",
+                    content: finalPrompt
+                }
+            ],
+            tools: tools
         });
-        return chatCompletion.choices[0].message.content || "No response";
+        return completion.choices[0].message.content || "No response";
     } catch (error) {
-        console.log("error", error);
-        return "Cloudflare API Error";
+        return handleAIError("Cloudflare", error);
     }
 };
 
+// 统一AI调用接口
 export const askAI = async (prompt: string, context: UserContext): Promise<string> => {
-    const rolePrompt = context.role ? roles[context.role]?.prompt : undefined;
-
-    switch (context.model) {
-        case "gemini":
-            return askGemini(prompt, rolePrompt);
-        case "hunyuan":
-            return askHunyuan(prompt, rolePrompt);
-        case "cloudflare":
-            return askCloudflare(prompt, rolePrompt);
-        default:
-            return "Invalid model selected";
+    const {model, role} = context;
+    const rolePrompt = role ? roles[role]?.prompt : undefined;
+    
+    console.log(`[${new Date().toISOString()}] [INFO] 使用模型: ${model}${role ? `, 角色: ${role}` : ''}`);
+    
+    try {
+        switch (model) {
+            case "gemini":
+                return await askGemini(prompt, rolePrompt);
+            case "hunyuan":
+                return await askHunyuan(prompt, rolePrompt);
+            case "cloudflare":
+                return await askCloudflare(prompt, rolePrompt);
+            default:
+                return await askHunyuan(prompt, rolePrompt); // 默认使用腾讯混元
+        }
+    } catch (error) {
+        return handleAIError(`统一AI调用(${model})`, error);
     }
 };
