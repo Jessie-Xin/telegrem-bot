@@ -10,6 +10,6 @@ services:
     environment:
       - NODE_ENV=production
     volumes:
-      - ./.env:/app/.env:ro
+       - ./.env:/app/.env:ro
     # 如果需要持久化日志或数据，可以添加以下卷
     # - ./logs:/app/logs
