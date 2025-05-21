@@ -29,7 +29,7 @@ RUN npm install -g pnpm && \
 COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
 
 # Copy environment file to dist directory
-COPY --chown=appuser:appgroup .env ./dist/
+COPY --chown=appuser:appgroup .env ./
 
 # Set environment and user
 ENV NODE_ENV=production
