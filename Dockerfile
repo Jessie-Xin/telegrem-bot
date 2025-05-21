@@ -2,43 +2,35 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 复制package.json和pnpm-lock.yaml
+# Copy package.json and pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml ./
 
-# 仅安装生产依赖
+# Install pnpm and dependencies
+RUN npm install -g pnpm && pnpm install
 
-# 安装 pnpm
-RUN npm install -g pnpm
-
-# 安装依赖
-RUN pnpm install
-
-# 复制源代码
+# Copy source code and build the application
 COPY . .
-
-# 构建应用
 RUN pnpm build
 
-# 生产环境镜像
+# Copy .env file to dist directory
+COPY .env ./dist
+
+# Production environment image
 FROM node:20-alpine
 
 WORKDIR /app
 
-# 复制package.json和pnpm-lock.yaml
+# Copy package.json and pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml ./
 
-# 安装 pnpm
-RUN npm install -g pnpm
+# Install pnpm and production dependencies
+RUN npm install -g pnpm && pnpm install --prod
 
-# 仅安装生产依赖
-RUN pnpm install --prod
-
-# 从构建阶段复制编译后的代码
+# Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-
-# 设置环境变量
+# Set environment variable
 ENV NODE_ENV=production
 
-# 启动应用
+# Start the application
 CMD ["node", "dist/bot.js"]
