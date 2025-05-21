@@ -12,8 +12,7 @@ RUN npm install -g pnpm && pnpm install
 COPY . .
 RUN pnpm build
 
-# Copy .env file to dist directory
-COPY .env ./dist
+
 
 # Production environment image
 FROM node:20-alpine
@@ -22,7 +21,8 @@ WORKDIR /app
 
 # Copy package.json and pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml ./
-
+# Copy .env file to dist directory
+COPY .env app/
 # Install pnpm and production dependencies
 RUN npm install -g pnpm && pnpm install --prod
 
