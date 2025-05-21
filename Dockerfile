@@ -21,13 +21,15 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy package files and install production dependencies
 COPY --chown=appuser:appgroup package.json pnpm-lock.yaml ./
-COPY --chown=appuser:appgroup .env ./
 RUN npm install -g pnpm && \
     pnpm install --prod && \
     npm uninstall -g pnpm
 
 # Copy built application from builder stage
 COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
+
+# Copy environment file to dist directory
+COPY --chown=appuser:appgroup .env ./dist/
 
 # Set environment and user
 ENV NODE_ENV=production
